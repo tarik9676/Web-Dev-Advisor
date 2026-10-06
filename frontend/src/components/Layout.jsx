@@ -1,0 +1,1 @@
+export default function Layout({ children }) {  return (    <div className="app-shell" style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: 'var(--bg)', color: 'var(--text-primary)' }}>{children}</div>  );}

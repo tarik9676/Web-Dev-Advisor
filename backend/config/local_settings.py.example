@@ -1,0 +1,21 @@
+import os
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "dev-local-secret-key-change-me")
+DEBUG = True
+ALLOWED_HOSTS = ["*"]
+
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": "webdev",
+        "USER": "webdev",
+        "PASSWORD": "webdev",
+        "HOST": "localhost",
+        "PORT": "5432",
+    }
+}
+
+CORS_ALLOWED_ORIGINS = ["http://localhost:3000"]
