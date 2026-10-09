@@ -1,13 +1,15 @@
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 
 from django.contrib.auth import authenticate, get_user_model, login, logout
+from django.db.models import Q
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
 
-from .serializers import RegisterSerializer, UserSerializer
+from .models import UserPreference
+from .serializers import RegisterSerializer, UserSerializer, UserPreferenceSerializer
 
 
 User = get_user_model()
@@ -89,3 +91,39 @@ class MeView(APIView):
         if not request.user.is_authenticated:
             return Response({"error": {"credentials": ["Not authenticated."]}}, status=status.HTTP_401_UNAUTHORIZED)
         return Response(UserSerializer(request.user).data)
+
+
+class UIPreferencesView(APIView):
+    """Interface choices that must follow the account, not the browser."""
+
+    permission_classes = [IsAuthenticated]
+
+    def _preferences(self, request):
+        prefs, _ = UserPreference.objects.get_or_create(user=request.user)
+        return prefs
+
+    def get(self, request):
+        return Response(UserPreferenceSerializer(self._preferences(request)).data)
+
+    def patch(self, request):
+        prefs = self._preferences(request)
+        serializer = UserPreferenceSerializer(prefs, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
+
+class UserSearchView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        query = request.query_params.get("q", "").strip()
+        if len(query) < 2:
+            return Response([])
+        users = User.objects.filter(
+            Q(username__icontains=query)
+            | Q(email__icontains=query)
+            | Q(first_name__icontains=query)
+            | Q(last_name__icontains=query)
+        )[:20]
+        return Response(UserSerializer(users, many=True).data)

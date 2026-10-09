@@ -1,4 +1,40 @@
+from django.conf import settings
 from django.db import models
+
+
+class Client(models.Model):
+    """Client organization profile. Referenced by projects for consistent naming,
+    contact info, and billing context. Each client has a linked user account
+    so they can log in as read-only project participants."""
+    name = models.CharField(max_length=255, unique=True)
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="client_profile",
+        null=True,
+        blank=True,
+    )
+    email = models.EmailField(blank=True, default="")
+    company = models.CharField(max_length=255, blank=True, default="")
+    phone = models.CharField(max_length=40, blank=True, default="")
+    profile_image = models.URLField(blank=True, default="")
+    street_address = models.TextField(blank=True, default="")
+    city = models.CharField(max_length=255, blank=True, default="")
+    postal_code = models.CharField(max_length=20, blank=True, default="")
+    country = models.CharField(max_length=255, blank=True, default="")
+    billing_address = models.TextField(blank=True, default="")
+    credentials = models.TextField(blank=True, default="")
+    notes = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name"]
+        verbose_name = "Client"
+        verbose_name_plural = "Clients"
+
+    def __str__(self):
+        return self.name
 
 
 class Project(models.Model):
@@ -10,7 +46,14 @@ class Project(models.Model):
         ("archived", "Archived"),
     ]
 
-    client_name = models.CharField(max_length=255)
+    client = models.ForeignKey(
+        Client,
+        on_delete=models.SET_NULL,
+        related_name="projects",
+        null=True,
+        blank=True,
+    )
+    client_name = models.CharField(max_length=255, blank=True, default="")
     project_name = models.CharField(max_length=255)
     slug = models.SlugField(max_length=255, unique=True)
     brief = models.TextField(blank=True, default="")

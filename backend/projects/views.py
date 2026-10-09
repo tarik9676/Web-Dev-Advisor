@@ -4,15 +4,21 @@ from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.response import Response
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.viewsets import ModelViewSet
+from rest_framework.views import APIView
 
+import calendar
+from datetime import datetime
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.db.models import Q, Sum
+from django.db.models.functions import TruncMonth
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 
-from .models import Project, ProjectInvoice, TeamMember
+from .models import Client, Project, ProjectInvoice, TeamMember
 from .serializers import (
+    ClientSerializer,
     ProjectDashboardSerializer,
     ProjectInvoiceSerializer,
     ProjectMemberSerializer,
@@ -144,6 +150,174 @@ class ProjectViewSet(ModelViewSet):
             "paid": f"{paid:.2f}",
             "outstanding": f"{invoiced - paid:.2f}",
             "by_status": by_status,
+        })
+
+
+def money(value):
+    return f"{value or Decimal('0.00'):.2f}"
+
+
+class BillingAnalyticsView(APIView):
+    """Income and growth analytics across every project the staff
+    member can see. Money figures are staff-only, like every other
+    billing surface."""
+
+    permission_classes = [IsAuthenticated]
+    MONTHS = 12
+
+    def get(self, request):
+        if not request.user.is_staff:
+            return Response(
+                {"error": "Billing analytics is staff-only."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        invoices = ProjectInvoice.objects.filter(
+            project__in=visible_projects(request.user),
+        ).exclude(status="void")
+        paid = invoices.filter(status="paid")
+
+        invoiced_total = invoices.aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
+        paid_total = paid.aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
+        budget_total = visible_projects(request.user).aggregate(
+            total=Sum("budget"),
+        )["total"]
+        by_currency = {
+            row["currency"]: money(row["total"])
+            for row in paid.values("currency").annotate(total=Sum("amount"))
+        }
+        primary_currency = max(
+            by_currency.items(), key=lambda item: Decimal(item[1]), default=None,
+        )
+        primary_currency = primary_currency[0] if primary_currency else "USD"
+
+        # Monthly buckets over the trailing window, per currency. Paid is
+        # bucketed by the moment money landed (paid_at), invoiced by when
+        # the installment was issued (created_at).
+        now = timezone.now()
+        base = now.year * 12 + now.month - 1
+        start_index = base - (self.MONTHS - 1)
+        periods = []
+        for index in range(start_index, base + 1):
+            year, month_index = divmod(index, 12)
+            month = month_index + 1
+            periods.append({
+                "period": f"{year}-{month:02d}",
+                "label": calendar.month_abbr[month],
+            })
+        window_start = datetime(
+            start_index // 12, start_index % 12 + 1, 1, tzinfo=timezone.utc,
+        )
+        paid_rows = (
+            paid.filter(paid_at__gte=window_start)
+            .annotate(month=TruncMonth("paid_at"))
+            .values("month", "currency")
+            .annotate(total=Sum("amount"))
+        )
+        invoiced_rows = (
+            invoices.filter(created_at__gte=window_start)
+            .annotate(month=TruncMonth("created_at"))
+            .values("month", "currency")
+            .annotate(total=Sum("amount"))
+        )
+        monthly = {}
+        for period in periods:
+            monthly[period["period"]] = {
+                "period": period["period"],
+                "label": period["label"],
+                "paid": {},
+                "invoiced": {},
+            }
+        for row in paid_rows:
+            key = row["month"].strftime("%Y-%m")
+            if key in monthly:
+                monthly[key]["paid"][row["currency"]] = money(row["total"])
+        for row in invoiced_rows:
+            key = row["month"].strftime("%Y-%m")
+            if key in monthly:
+                monthly[key]["invoiced"][row["currency"]] = money(row["total"])
+
+        # Growth compares the two most recent months of the window in the
+        # currency that carries the most paid volume.
+        def paid_in(period_key):
+            return Decimal(monthly[period_key]["paid"].get(primary_currency, "0.00"))
+
+        current_period = periods[-1]["period"]
+        previous_period = periods[-2]["period"]
+        current = paid_in(current_period)
+        previous = paid_in(previous_period)
+        percent = None
+        if previous > 0:
+            percent = round(float((current - previous) / previous * 100), 1)
+        growth = {
+            "current_period": current_period,
+            "current_label": periods[-1]["label"],
+            "previous_period": previous_period,
+            "previous_label": periods[-2]["label"],
+            "current": money(current),
+            "previous": money(previous),
+            "percent": percent,
+            "direction": "up" if current > previous else "down" if current < previous else "flat",
+        }
+
+        top_clients = sorted(
+            (
+                {
+                    "client_name": row["project__client_name"] or "Unassigned",
+                    "paid": money(row["total"]),
+                    "currency": row["currency"],
+                }
+                for row in paid.values("project__client_name", "currency")
+                .annotate(total=Sum("amount"))
+            ),
+            key=lambda item: Decimal(item["paid"]),
+            reverse=True,
+        )[:5]
+
+        by_status = {
+            row["status"]: money(row["total"])
+            for row in invoices.values("status").annotate(total=Sum("amount"))
+        }
+        return Response({
+            "totals": {
+                "budget": money(budget_total) if budget_total is not None else None,
+                "currency": primary_currency,
+                "invoiced": money(invoiced_total),
+                "paid": money(paid_total),
+                "outstanding": money(invoiced_total - paid_total),
+                "invoice_count": invoices.count(),
+                "paid_count": paid.count(),
+                "by_currency": by_currency,
+            },
+            "growth": growth,
+            "monthly": list(monthly.values()),
+            "by_status": by_status,
+            "top_clients": top_clients,
+        })
+
+
+class GlobalInvoiceListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not request.user.is_staff:
+            return Response(
+                {"error": "This view is staff-only."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        queryset = ProjectInvoice.objects.filter(
+            project__in=visible_projects(request.user),
+        ).select_related("project", "milestone").order_by("-created_at")
+
+        page_size = min(int(request.query_params.get("page_size", 50)), 100)
+        page = max(int(request.query_params.get("page", 1)), 1)
+        start = (page - 1) * page_size
+        end = start + page_size
+
+        invoices = queryset[start:end]
+        serializer = ProjectInvoiceSerializer(invoices, many=True)
+        return Response({
+            "count": queryset.count(),
+            "results": serializer.data,
         })
 
 
@@ -292,3 +466,25 @@ class TeamMemberViewSet(ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(project_id=self.kwargs.get("project_pk"))
+
+
+class ClientViewSet(ModelViewSet):
+    """Client profiles. Staff manage clients; they're referenced by projects.
+    Each client has a linked user account for read-only project access."""
+    permission_classes = [IsAuthenticated]
+    queryset = Client.objects.all()
+    serializer_class = ClientSerializer
+    search_fields = ["name", "email", "company"]
+    ordering_fields = ["name", "created_at"]
+    ordering = ["name"]
+
+    def get_permissions(self):
+        if self.action in ("create", "update", "partial_update", "destroy"):
+            return [IsAdminUser()]
+        return super().get_permissions()
+
+    def perform_destroy(self, instance):
+        user = instance.user
+        instance.delete()
+        if user:
+            user.delete()

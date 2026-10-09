@@ -82,7 +82,19 @@ const del = (path, data) => apiFetch(path, {
 });
 
 export const api = {
-  get: (path) => apiFetch(path),
+  get: (path, options) => {
+    if (options?.params) {
+      const searchParams = new URLSearchParams();
+      Object.entries(options.params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          searchParams.append(key, value);
+        }
+      });
+      const query = searchParams.toString();
+      if (query) path = `${path}?${query}`;
+    }
+    return apiFetch(path, options);
+  },
   post: (path, data) => apiFetch(path, { method: 'POST', body: JSON.stringify(data) }),
   put: (path, data) => apiFetch(path, { method: 'PUT', body: JSON.stringify(data) }),
   patch: (path, data) => apiFetch(path, { method: 'PATCH', body: JSON.stringify(data) }),

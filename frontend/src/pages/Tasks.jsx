@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronUp, Plus, Save, X } from 'lucide-react';
 import { api } from '../api/client.js';
 import { useApp } from '../context/AppContext.jsx';
+import Header from '../components/Header.jsx';
 import StatusSignal from '../components/StatusSignal.jsx';
 import StatusBadge from '../components/StatusBadge.jsx';
 import PriorityDot from '../components/PriorityDot.jsx';
@@ -10,6 +11,7 @@ import EmptyState from '../components/EmptyState.jsx';
 import ErrorState from '../components/ErrorState.jsx';
 import Modal from '../components/Modal.jsx';
 import { formatDate, memberName, projectName } from '../utils/helpers.js';
+import DatePicker from '../components/DatePicker.jsx';
 
 const STATUSES = ['not_started', 'blocked', 'in_progress', 'internal_review', 'client_review', 'approved', 'done'];
 const PRIORITIES = ['low', 'medium', 'high', 'critical'];
@@ -66,7 +68,7 @@ function TaskForm({ project, workstreams, tasks, task, onClose, onSaved }) {
         <label>Human reviewer<select value={form.reviewer_id} onChange={(event) => update('reviewer_id', event.target.value)}>{humans.map((member) => <option value={member.id} key={member.id}>{member.name}</option>)}</select></label>
         <label>Status<select value={form.status} onChange={(event) => update('status', event.target.value)}>{STATUSES.map((status) => <option value={status} key={status}>{status.replaceAll('_', ' ')}</option>)}</select></label>
         <label>Priority<select value={form.priority} onChange={(event) => update('priority', event.target.value)}>{PRIORITIES.map((priority) => <option value={priority} key={priority}>{priority}</option>)}</select></label>
-        <label>Due date<input type="date" value={form.due_date} onChange={(event) => update('due_date', event.target.value)} /></label>
+        <label>Due date<DatePicker value={form.due_date} onChange={(val) => update('due_date', val)} placeholder="Select due date" /></label>
         <label>Definition of done<textarea rows="3" value={form.definition_of_done} onChange={(event) => update('definition_of_done', event.target.value)} /></label>
         <label className="check-row">Client input required<input type="checkbox" checked={form.client_input_required} onChange={(event) => update('client_input_required', event.target.checked)} /></label>
         <label>Client input / reference<textarea rows="3" value={form.client_input_text} onChange={(event) => update('client_input_text', event.target.value)} /></label>
@@ -79,7 +81,7 @@ function TaskForm({ project, workstreams, tasks, task, onClose, onSaved }) {
 }
 
 export default function Tasks() {
-  const { projectId, audience, loadProject, loadTasks, loadWorkstreams, showToast } = useApp();
+  const { projectId, audience, projects, selectProject, loadProject, loadTasks, loadWorkstreams, showToast } = useApp();
   const [project, setProject] = useState(null);
   const [workstreams, setWorkstreams] = useState([]);
   const [tasks, setTasks] = useState(null);
@@ -125,8 +127,15 @@ export default function Tasks() {
   if (error) return <ErrorState message="Failed to load tasks" onRetry={load} />;
   if (loading || !tasks) return <div className="page-loading"><SkeletonTable rows={7} /></div>;
 
+  const handleProjectChange = (event) => {
+    const id = event.target.value;
+    selectProject(id);
+    loadProject(id);
+  };
+
   return (
     <div className="page">
+      <Header project={project} onProjectChange={handleProjectChange} projects={projects} />
       <header className="page-heading"><div><div className="eyebrow">Execution / task queue</div><h1>{projectName(project)}</h1><p>Every task has a human assignee, a human reviewer, and a testable definition of done.</p></div><button className="button primary" onClick={() => setCreating(true)}><Plus size={15} /> Add task</button></header>
       <section className="filter-bar" aria-label="Task filters">
         <label>Status<select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="all">All statuses</option>{STATUSES.map((status) => <option value={status} key={status}>{status.replaceAll('_', ' ')}</option>)}</select></label>

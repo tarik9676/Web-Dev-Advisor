@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { BookOpen, Check, ChevronDown, ChevronUp, ShieldCheck } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
+import Header from '../components/Header.jsx';
 import StatusSignal from '../components/StatusSignal.jsx';
 import StatusBadge from '../components/StatusBadge.jsx';
 import { SkeletonLines } from '../components/Skeleton.jsx';
@@ -15,7 +16,7 @@ const RULES = [
 ];
 
 export default function Knowledge() {
-  const { projectId, audience, loadKnowledge } = useApp();
+  const { projectId, audience, projects, selectProject, loadProject, loadKnowledge } = useApp();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -34,7 +35,13 @@ export default function Knowledge() {
   const visibleDecisions = audience === 'client' ? decisions.filter((decision) => decision.client_visible) : decisions;
   const completed = milestones.filter((milestone) => milestone.status === 'completed').length;
   const progress = milestones.length ? Math.round((completed / milestones.length) * 100) : 0;
+  const handleProjectChange = (event) => {
+    const id = event.target.value;
+    selectProject(id);
+    loadProject(id);
+  };
   return <div className="page knowledge-page">
+    <Header project={project} onProjectChange={handleProjectChange} projects={projects} />
     <header className="page-heading"><div><div className="eyebrow">Knowledge / shared context</div><h1>{projectName(project)}</h1><p>The brief, success measures, decisions, operating rules, and launch evidence stay together.</p></div><div className="knowledge-progress"><span>Launch evidence</span><strong>{progress}%</strong></div></header>
     <section className="knowledge-grid">
       <div className="panel brief-panel"><div className="panel-heading"><span>Project brief</span><BookOpen size={16} /></div><div className="brief-grid"><div><small>Business goal</small><p>{project.goals || project.brief || '—'}</p></div><div><small>Target audience</small><p>{project.target_audience || '—'}</p></div><div><small>Budget</small><p>{project.budget === null || project.budget === undefined ? 'Staff only' : currencyValue(project.budget, project.currency)}</p></div><div><small>Launch target</small><p>{formatDate(project.launch_date || project.deadline)}</p></div></div><div className="metrics-list"><small>Success metrics</small>{(project.success_metrics || []).map((metric, index) => <div key={index}><span className="metric-index">{index + 1}</span>{metric}</div>)}</div></div>

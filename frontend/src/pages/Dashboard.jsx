@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 import { useApp } from '../context/AppContext.jsx';
+import Header from '../components/Header.jsx';
 import StatusSignal from '../components/StatusSignal.jsx';
 import StatusBadge from '../components/StatusBadge.jsx';
 import PriorityDot from '../components/PriorityDot.jsx';
@@ -57,7 +58,7 @@ function ReadinessRing({ value }) {
 }
 
 export default function Dashboard() {
-  const { projectId, audience, loadDashboard, showToast } = useApp();
+  const { projectId, audience, projects, selectProject, loadProject, loadDashboard, showToast } = useApp();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -110,8 +111,15 @@ export default function Dashboard() {
     }
   };
 
+  const handleProjectChange = (event) => {
+    const id = event.target.value;
+    selectProject(id);
+    loadProject(id);
+  };
+
   return (
     <div className="page dashboard-page">
+      <Header project={project} onProjectChange={handleProjectChange} projects={projects} />
       <header className="page-heading dashboard-heading">
         <div>
           <div className="eyebrow">Delivery workspace</div>

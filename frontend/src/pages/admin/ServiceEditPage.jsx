@@ -4,6 +4,8 @@ import { Loader2, Save, ArrowLeft, Globe, Briefcase, Layout } from 'lucide-react
 import BlockEditor, { countBlocks } from '../../components/BlockEditor';
 import ListEntriesField from '../../components/ListEntriesField';
 import { servicesApi } from '../../api/products';
+import { useApp } from '../../context/AppContext.jsx';
+import Header from '../../components/Header.jsx';
 import { BlockVariableContext } from '../../context/BlockVariableContext.jsx';
 import { serviceVariableScope } from '../../lib/serviceVariables.js';
 
@@ -37,6 +39,8 @@ function slugify(value) {
 }
 
 export default function ServiceEditPage() {
+  const { projectId, projects, selectProject, loadProject } = useApp();
+  const activeProject = projects.find((item) => String(item.id) === String(projectId)) || projects[0];
   const { slug } = useParams();
   const navigate = useNavigate();
   const isNew = !slug || slug === 'new';
@@ -46,6 +50,12 @@ export default function ServiceEditPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('details');
+
+  const handleProjectChange = (event) => {
+    const id = event.target.value;
+    selectProject(id);
+    loadProject(id);
+  };
 
   useEffect(() => {
     if (!isNew) {
@@ -131,6 +141,7 @@ export default function ServiceEditPage() {
 
   return (
     <div className="page service-edit-page">
+      <Header project={activeProject} onProjectChange={handleProjectChange} projects={projects} />
       <div className="edit-header">
         <div className="edit-header-left">
           <button className="button secondary" onClick={handleCancel} type="button">

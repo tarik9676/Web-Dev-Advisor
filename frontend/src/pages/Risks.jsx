@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, Save, TriangleAlert } from 'lucide-react';
 import { api } from '../api/client.js';
 import { useApp } from '../context/AppContext.jsx';
+import Header from '../components/Header.jsx';
 import StatusSignal from '../components/StatusSignal.jsx';
 import StatusBadge from '../components/StatusBadge.jsx';
 import { SkeletonTable } from '../components/Skeleton.jsx';
@@ -58,7 +59,7 @@ function RiskForm({ project, risk, onClose, onSaved }) {
 }
 
 export default function Risks() {
-  const { projectId, audience, loadProject, loadRisks, showToast } = useApp();
+  const { projectId, audience, projects, selectProject, loadProject, loadRisks, showToast } = useApp();
   const [project, setProject] = useState(null);
   const [risks, setRisks] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -91,7 +92,14 @@ export default function Risks() {
   };
   if (error) return <ErrorState message="Failed to load risk register" onRetry={load} />;
   if (loading || !risks) return <div className="page-loading"><SkeletonTable rows={6} /></div>;
+
+  const handleProjectChange = (event) => {
+    const id = event.target.value;
+    selectProject(id);
+    loadProject(id);
+  };
   return <div className="page">
+    <Header project={project} onProjectChange={handleProjectChange} projects={projects} />
     <header className="page-heading"><div><div className="eyebrow">Risk / mitigation register</div><h1>{projectName(project)}</h1><p>Risks stay visible with an owner, mitigation, severity, and a human decision path.</p></div><button className="button primary" onClick={() => setCreating(true)}><Plus size={15} /> Add risk</button></header>
     <section className="risk-summary"><div><TriangleAlert size={19} /><strong>{visible.filter((risk) => ['critical', 'high'].includes(risk.severity)).length}</strong><span>High exposure</span></div><div><strong>{visible.filter((risk) => risk.status === 'mitigating').length}</strong><span>Mitigating</span></div><div><strong>{visible.filter((risk) => risk.status === 'resolved').length}</strong><span>Resolved</span></div></section>
     <section className="panel table-panel"><div className="panel-heading"><div><span>Risk register</span><small>{audience === 'client' ? 'Client-visible risks' : 'Internal and client-visible risks'}</small></div><span className="panel-count">{visible.length} risks</span></div>

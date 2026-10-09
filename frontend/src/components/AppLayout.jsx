@@ -5,7 +5,6 @@ import { useApp } from '../context/AppContext.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import Layout from './Layout.jsx';
 import Sidebar from './Sidebar.jsx';
-import Header from './Header.jsx';
 import Toast from './Toast.jsx';
 
 export default function AppLayout() {
@@ -14,11 +13,15 @@ export default function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const isAdminRoute = location.pathname.startsWith('/app/admin');
-  const isProjectAdminRoute = location.pathname.startsWith('/app/projects');
+  const isProjectRoute = location.pathname.startsWith('/app/projects');
   const isBillingRoute = location.pathname.startsWith('/app/billing');
-  // Routes that manage the catalog, projects, or invoices are not scoped to one
+  const isOrdersRoute = location.pathname.startsWith('/app/orders');
+  // Routes that manage the catalog, projects, orders, or invoices are not scoped to one
   // project, so they must not be replaced by the "no project access" empty state.
-  const isUnscopedRoute = isAdminRoute || isProjectAdminRoute || isBillingRoute;
+  const isUnscopedRoute = isAdminRoute || isProjectRoute || isBillingRoute || isOrdersRoute;
+  // The topbar carries the project switcher and audience toggle. It is hidden
+  // only on catalog admin routes; every other /app surface shows it.
+  const isDeliveryRoute = !isAdminRoute;
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
@@ -67,7 +70,6 @@ export default function AppLayout() {
 
   return (
     <Layout>
-      <Header project={project} onProjectChange={handleProjectChange} projects={projects} />
       <div className="app-body">
         <Sidebar user={user} onSignOut={handleSignOut} />
         <main className={isAdminRoute ? 'app-main is-full-bleed' : 'app-main'}>

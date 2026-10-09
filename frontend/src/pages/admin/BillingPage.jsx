@@ -4,6 +4,9 @@ import { invoicesApi } from '../../api/invoices';
 import { projectsApi } from '../../api/projects';
 import { api } from '../../api/client';
 import { currencyValue, formatDate } from '../../utils/helpers';
+import { useApp } from '../../context/AppContext.jsx';
+import Header from '../../components/Header.jsx';
+import DatePicker from '../../components/DatePicker.jsx';
 
 const EMPTY_INVOICE = {
   label: '',
@@ -68,7 +71,9 @@ function InvoiceRow({ invoice, onSend, onVoid, busy }) {
 }
 
 export default function BillingPage() {
-  const [projects, setProjects] = useState([]);
+  const { projectId: contextProjectId, projects, selectProject, loadProject } = useApp();
+  const project = projects.find((item) => String(item.id) === String(contextProjectId)) || projects[0];
+  const [projectsList, setProjectsList] = useState([]);
   const [projectId, setProjectId] = useState(null);
   const [summary, setSummary] = useState(null);
   const [invoices, setInvoices] = useState([]);
@@ -85,7 +90,7 @@ export default function BillingPage() {
     projectsApi.getAll({})
       .then((items) => {
         if (!active) return;
-        setProjects(items);
+        setProjectsList(items);
         if (items.length) setProjectId(String(items[0].id));
         else setLoading(false);
       })
@@ -96,6 +101,12 @@ export default function BillingPage() {
       });
     return () => { active = false; };
   }, []);
+
+  const handleProjectChange = (event) => {
+    const id = event.target.value;
+    setProjectId(id);
+    loadBilling(id);
+  };
 
   const loadBilling = useCallback(async (id) => {
     if (!id) return;
@@ -216,6 +227,7 @@ export default function BillingPage() {
 
   return (
     <div className="page billing-page">
+      <Header project={project} onProjectChange={handleProjectChange} projects={projects} />
       <div className="page-heading">
         <div>
           <span className="eyebrow">Billing</span>
@@ -373,11 +385,7 @@ export default function BillingPage() {
             </label>
             <label>
               <span>Due date</span>
-              <input
-                type="date"
-                value={draft.due_date}
-                onChange={(e) => setDraft(prev => ({ ...prev, due_date: e.target.value }))}
-              />
+              <DatePicker value={draft.due_date} onChange={(val) => setDraft(prev => ({ ...prev, due_date: val }))} placeholder="Select due date" />
             </label>
             <label className="span-2">
               <span>Description</span>

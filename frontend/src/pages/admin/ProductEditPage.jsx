@@ -6,6 +6,8 @@ import { BlockVariableContext } from '../../context/BlockVariableContext.jsx';
 import { productVariableScope } from '../../lib/productVariables.js';
 import ListEntriesField from '../../components/ListEntriesField';
 import { productsApi } from '../../api/products';
+import { useApp } from '../../context/AppContext.jsx';
+import Header from '../../components/Header.jsx';
 
 // Newline-delimited TextField <-> string[] for the list editor.
 function toLines(text) {
@@ -50,6 +52,8 @@ function slugify(value) {
 }
 
 export default function ProductEditPage() {
+  const { projectId, projects, selectProject, loadProject } = useApp();
+  const activeProject = projects.find((item) => String(item.id) === String(projectId)) || projects[0];
   const { slug } = useParams();
   const navigate = useNavigate();
   const isNew = !slug || slug === 'new';
@@ -60,6 +64,12 @@ export default function ProductEditPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('details');
+
+  const handleProjectChange = (event) => {
+    const id = event.target.value;
+    selectProject(id);
+    loadProject(id);
+  };
 
   useEffect(() => {
     if (!isNew) {
@@ -158,6 +168,7 @@ export default function ProductEditPage() {
 
   return (
     <div className="page product-edit-page">
+      <Header project={activeProject} onProjectChange={handleProjectChange} projects={projects} />
       <div className="edit-header">
         <div className="edit-header-left">
           <button className="button secondary" onClick={handleCancel} type="button">

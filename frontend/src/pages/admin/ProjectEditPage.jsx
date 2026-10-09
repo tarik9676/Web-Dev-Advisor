@@ -2,7 +2,13 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Loader2, Save, ArrowLeft, Users, Trash2, Plus } from 'lucide-react';
 import ListEntriesField from '../../components/ListEntriesField';
+import RichTextField from '../../components/RichTextField';
+import ClientSelect from '../../components/ClientSelect';
+import UserSearch from '../../components/UserSearch';
+import DatePicker from '../../components/DatePicker';
 import { projectsApi } from '../../api/projects';
+import { useApp } from '../../context/AppContext.jsx';
+import Header from '../../components/Header.jsx';
 
 const STATUS_CHOICES = [
   ['planning', 'Planning'],
@@ -45,6 +51,7 @@ const ROLE_CHOICES = [
 
 const EMPTY_PROJECT = {
   client_name: '',
+  client_id: '',
   project_name: '',
   slug: '',
   brief: '',
@@ -73,6 +80,8 @@ function slugify(value) {
 }
 
 export default function ProjectEditPage() {
+  const { projectId, projects, selectProject, loadProject } = useApp();
+  const activeProject = projects.find((item) => String(item.id) === String(projectId)) || projects[0];
   const { id } = useParams();
   const navigate = useNavigate();
   const isNew = !id || id === 'new';
@@ -80,11 +89,16 @@ export default function ProjectEditPage() {
   const [team, setTeam] = useState([]);
   const [access, setAccess] = useState([]);
   const [newMember, setNewMember] = useState({ name: '', role: 'developer', kind: 'human', email: '', client_access: false });
-  const [addUsername, setAddUsername] = useState('');
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('details');
+
+  const handleProjectChange = (event) => {
+    const nextId = event.target.value;
+    selectProject(nextId);
+    loadProject(nextId);
+  };
 
   useEffect(() => {
     if (isNew) {
@@ -93,11 +107,11 @@ export default function ProjectEditPage() {
       setAccess([]);
       setLoading(false);
     } else {
-      loadProject(id);
+      fetchProject(id);
     }
   }, [id, isNew]);
 
-  const loadProject = async (projectId) => {
+  const fetchProject = async (projectId) => {
     try {
       const data = await projectsApi.getById(projectId);
       setProject({ ...EMPTY_PROJECT, ...data });
@@ -116,8 +130,8 @@ export default function ProjectEditPage() {
   };
 
   const handleSave = async () => {
-    if (!project.client_name.trim()) {
-      setError('Client name is required');
+    if (!project.client_id) {
+      setError('Client is required');
       return;
     }
     if (!project.project_name.trim()) {
@@ -143,6 +157,7 @@ export default function ProjectEditPage() {
     delete payload.team_members;
     delete payload.created_at;
     delete payload.updated_at;
+    delete payload.client_name;
 
     try {
       if (isNew) {
@@ -184,17 +199,16 @@ export default function ProjectEditPage() {
     }
   };
 
-  const handleAddAccess = async () => {
-    const username = addUsername.trim();
-    if (!username) {
+  const handleAddAccess = async (username = '') => {
+    const trimmed = username.trim();
+    if (!trimmed) {
       setError('Username is required');
       return;
     }
     setError(null);
     try {
-      const added = await projectsApi.addMember(id, { username });
+      const added = await projectsApi.addMember(id, { username: trimmed });
       setAccess(prev => (prev.some(u => u.id === added.id) ? prev : [...prev, added]));
-      setAddUsername('');
     } catch (err) {
       setError(err.message);
     }
@@ -222,6 +236,7 @@ export default function ProjectEditPage() {
 
   return (
     <div className="page project-edit-page">
+      <Header project={activeProject} onProjectChange={handleProjectChange} projects={projects} />
       <div className="edit-header">
         <div className="edit-header-left">
           <button className="button secondary" onClick={() => navigate('/app/projects')} type="button">
@@ -272,22 +287,6 @@ export default function ProjectEditPage() {
           <div className="meta-panel-body">
             <div className="form-grid">
               <label>
-                <span>Client Name <em className="meta-required">*</em></span>
-                <input
-                  type="text"
-                  value={project.client_name}
-                  onChange={(e) => {
-                    const client_name = e.target.value;
-                    setProject(prev => ({
-                      ...prev,
-                      client_name,
-                      slug: isNew && prev.slug === slugify(prev.project_name) ? slugify(client_name) : prev.slug,
-                    }));
-                  }}
-                  placeholder="Acme Inc."
-                />
-              </label>
-              <label>
                 <span>Project Name <em className="meta-required">*</em></span>
                 <input
                   type="text"
@@ -301,6 +300,15 @@ export default function ProjectEditPage() {
                     }));
                   }}
                   placeholder="Storefront Replatform"
+                />
+              </label>
+              <label>
+                <span>Client <em className="meta-required">*</em></span>
+                <ClientSelect
+                  value={project.client_id}
+                  onChange={(clientId) => setProject(prev => ({ ...prev, client_id: clientId, client_name: clientId ? '' : '' }))}
+                  placeholder="Search or create client..."
+                  required
                 />
               </label>
               <label>
@@ -335,25 +343,25 @@ export default function ProjectEditPage() {
                 <span>Currency</span>
                 <input type="text" maxLength={3} value={project.currency} onChange={(e) => setField('currency', e.target.value.toUpperCase())} placeholder="USD" />
               </label>
-              <label>
-                <span>Deadline</span>
-                <input type="date" value={project.deadline || ''} onChange={(e) => setField('deadline', e.target.value)} />
-              </label>
-              <label>
-                <span>Launch Date</span>
-                <input type="date" value={project.launch_date || ''} onChange={(e) => setField('launch_date', e.target.value)} />
-              </label>
+                <label>
+                  <span>Deadline</span>
+                  <DatePicker value={project.deadline || ''} onChange={(val) => setField('deadline', val)} placeholder="Select deadline" />
+                </label>
+                <label>
+                  <span>Launch Date</span>
+                  <DatePicker value={project.launch_date || ''} onChange={(val) => setField('launch_date', val)} placeholder="Select launch date" />
+                </label>
               <label className="span-2">
                 <span>Staging URL</span>
                 <input type="url" value={project.staging_url} onChange={(e) => setField('staging_url', e.target.value)} placeholder="https://staging.example.com" />
               </label>
               <label className="span-2">
                 <span>Brief</span>
-                <textarea rows={4} value={project.brief} onChange={(e) => setField('brief', e.target.value)} />
+                <RichTextField value={project.brief || ''} onChange={(val) => setField('brief', val)} placeholder="Describe the project scope, objectives, and key requirements..." />
               </label>
               <label className="span-2">
                 <span>Goals</span>
-                <textarea rows={3} value={project.goals} onChange={(e) => setField('goals', e.target.value)} />
+                <RichTextField value={project.goals || ''} onChange={(val) => setField('goals', val)} placeholder="List measurable goals and outcomes..." />
               </label>
               <label className="span-2">
                 <span>Target Audience</span>
@@ -432,15 +440,10 @@ export default function ProjectEditPage() {
                 <label>
                   <span>Add by username</span>
                   <div className="inline-actions">
-                    <input
-                      type="text"
-                      value={addUsername}
-                      onChange={(e) => setAddUsername(e.target.value)}
-                      placeholder="client-username"
+                    <UserSearch
+                      placeholder="Search users…"
+                      onSelect={(user) => handleAddAccess(user.username)}
                     />
-                    <button className="button secondary" onClick={handleAddAccess} type="button">
-                      <Plus size={14} /> Grant
-                    </button>
                   </div>
                 </label>
               </div>

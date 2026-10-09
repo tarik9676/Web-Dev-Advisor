@@ -1,7 +1,128 @@
 from django.contrib.auth import get_user_model
+from django.utils.text import slugify
 from rest_framework import serializers
 
-from projects.models import Project, ProjectInvoice, TeamMember
+from projects.models import Client, Project, ProjectInvoice, TeamMember
+
+
+User = get_user_model()
+
+
+def _generate_username(base_name):
+    """Generate a unique username from a base name."""
+    base = slugify(base_name) or "client"
+    username = base
+    counter = 1
+    while User.objects.filter(username__iexact=username).exists():
+        counter += 1
+        username = f"{base}-{counter}"
+    return username
+
+
+class ClientSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    password = serializers.CharField(
+        write_only=True,
+        required=False,
+        allow_blank=True,
+        style={"input_type": "password"},
+    )
+    user_id = serializers.IntegerField(source="user.id", read_only=True)
+    user_username = serializers.CharField(source="user.username", read_only=True)
+
+    class Meta:
+        model = Client
+        fields = [
+            "id",
+            "name",
+            "user_id",
+            "user_username",
+            "username",
+            "password",
+            "email",
+            "company",
+            "phone",
+            "profile_image",
+            "street_address",
+            "city",
+            "postal_code",
+            "country",
+            "billing_address",
+            "credentials",
+            "notes",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "user_id", "user_username", "created_at", "updated_at"]
+
+    def _get_or_create_user(self, client, username, password):
+        """Create or update the linked user for this client."""
+        if client.user:
+            user = client.user
+            if username and username != user.username:
+                if User.objects.exclude(pk=user.pk).filter(username__iexact=username).exists():
+                    raise serializers.ValidationError({"username": "This username is already taken."})
+                user.username = username
+            if password:
+                user.set_password(password)
+            user.email = client.email
+            user.first_name = client.name
+            user.last_name = ""
+            user.is_staff = False
+            user.is_active = True
+            user.save()
+            return user
+        # No linked user yet
+        final_username = username or _generate_username(client.name)
+        existing_user = User.objects.filter(username__iexact=final_username).first()
+        if existing_user:
+            if existing_user.client_profile is None:
+                user = existing_user
+            else:
+                final_username = _generate_username(client.name)
+                while User.objects.filter(username__iexact=final_username).exists():
+                    final_username = _generate_username(client.name)
+                user = User.objects.create(
+                    username=final_username,
+                    email=client.email,
+                    first_name=client.name,
+                    last_name="",
+                    is_staff=False,
+                    is_active=True,
+                )
+        else:
+            user = User.objects.create(
+                username=final_username,
+                email=client.email,
+                first_name=client.name,
+                last_name="",
+                is_staff=False,
+                is_active=True,
+            )
+        if password:
+            user.set_password(password)
+        else:
+            user.set_unusable_password()
+        user.save()
+        client.user = user
+        client.save(update_fields=["user", "updated_at"])
+        return user
+
+    def create(self, validated_data):
+        username = validated_data.pop("username", "")
+        password = validated_data.pop("password", "")
+        client = Client.objects.create(**validated_data)
+        self._get_or_create_user(client, username, password)
+        return client
+
+    def update(self, instance, validated_data):
+        username = validated_data.pop("username", "")
+        password = validated_data.pop("password", "")
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        self._get_or_create_user(instance, username, password)
+        return instance
 
 
 class TeamMemberSerializer(serializers.ModelSerializer):
@@ -14,23 +135,27 @@ class TeamMemberSerializer(serializers.ModelSerializer):
 class ProjectInvoiceSerializer(serializers.ModelSerializer):
     milestone_name = serializers.CharField(source="milestone.name", read_only=True, default="")
     invoice_number = serializers.SerializerMethodField()
+    project_name = serializers.SerializerMethodField()
 
     class Meta:
         model = ProjectInvoice
         fields = [
-            "id", "invoice_number", "project", "milestone", "milestone_name",
+            "id", "invoice_number", "project", "project_name", "milestone", "milestone_name",
             "label", "description", "amount", "currency", "client_email", "status",
             "due_date", "stripe_checkout_session_id", "stripe_payment_intent_id",
             "paid_at", "created_at", "updated_at",
         ]
-        # Money state is webhook-only. Staff can draft and void, never mark paid.
         read_only_fields = [
             "project", "status", "stripe_checkout_session_id",
             "stripe_payment_intent_id", "paid_at", "created_at", "updated_at",
         ]
 
     def get_invoice_number(self, obj):
-        return f"INV-{obj.pk:04d}"
+        project_id = obj.project_id or obj.project.id
+        return f"P{project_id:04d}-I{obj.pk:04d}"
+
+    def get_project_name(self, obj):
+        return obj.project.project_name if obj.project_id else "—"
 
     def validate_milestone(self, value):
         project = self.context.get("project")
@@ -69,6 +194,14 @@ def redact_budget(instance_data, context):
 
 class ProjectSerializer(serializers.ModelSerializer):
     team_members = TeamMemberSerializer(many=True, read_only=True)
+    client_id = serializers.PrimaryKeyRelatedField(
+        queryset=Client.objects.all(),
+        source="client",
+        write_only=True,
+        required=False,
+        allow_null=True,
+    )
+    client_name = serializers.CharField(source="client.name", read_only=True)
 
     class Meta:
         model = Project
@@ -76,9 +209,15 @@ class ProjectSerializer(serializers.ModelSerializer):
         # `members` is managed by staff through the members action, not by a
         # project member editing their own project.
         read_only_fields = ["members", "created_at", "updated_at"]
+        # Exclude the raw FK field to avoid conflict with client_id
+        extra_kwargs = {
+            "client": {"read_only": True},
+        }
 
     def to_representation(self, instance):
-        return redact_budget(super().to_representation(instance), self.context)
+        data = super().to_representation(instance)
+        data["client_id"] = instance.client_id
+        return redact_budget(data, self.context)
 
 
 class ProjectDashboardSerializer(serializers.ModelSerializer):

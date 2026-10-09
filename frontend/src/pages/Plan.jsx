@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, Save, X } from 'lucide-react';
 import { api } from '../api/client.js';
 import { useApp } from '../context/AppContext.jsx';
+import Header from '../components/Header.jsx';
 import StatusSignal from '../components/StatusSignal.jsx';
 import StatusBadge from '../components/StatusBadge.jsx';
 import { SkeletonLines, SkeletonTable } from '../components/Skeleton.jsx';
@@ -74,7 +75,7 @@ function WorkstreamForm({ project, workstream, onClose, onSaved }) {
 }
 
 export default function Plan() {
-  const { projectId, audience, loadProject, loadWorkstreams, loadTasks, showToast } = useApp();
+  const { projectId, audience, projects, selectProject, loadProject, loadWorkstreams, loadTasks, showToast } = useApp();
   const [project, setProject] = useState(null);
   const [workstreams, setWorkstreams] = useState(null);
   const [tasks, setTasks] = useState([]);
@@ -116,8 +117,15 @@ export default function Plan() {
   if (error) return <ErrorState message="Failed to load the project plan" onRetry={load} />;
   if (loading || !workstreams) return <div className="page-loading"><SkeletonLines count={3} /><SkeletonTable rows={6} /></div>;
 
+  const handleProjectChange = (event) => {
+    const id = event.target.value;
+    selectProject(id);
+    loadProject(id);
+  };
+
   return (
     <div className="page">
+      <Header project={project} onProjectChange={handleProjectChange} projects={projects} />
       <header className="page-heading"><div><div className="eyebrow">Plan / ownership map</div><h1>{projectName(project)}</h1><p>Workstreams are bounded by inputs, outputs, acceptance criteria, and a human approval gate.</p></div><button className="button primary" onClick={() => setCreating(true)}><Plus size={15} /> Add workstream</button></header>
       <section className="panel table-panel">
         <div className="panel-heading"><div><span>Delivery workstreams</span><small>{audience === 'client' ? 'Client-visible scope and gates' : 'Employees and AI agents work in parallel'}</small></div><span className="panel-count">{visibleStreams.length} streams</span></div>

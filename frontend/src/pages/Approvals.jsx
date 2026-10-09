@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Check, Plus, ShieldCheck, X } from 'lucide-react';
 import { api } from '../api/client.js';
 import { useApp } from '../context/AppContext.jsx';
+import Header from '../components/Header.jsx';
 import StatusSignal from '../components/StatusSignal.jsx';
 import StatusBadge from '../components/StatusBadge.jsx';
 import { SkeletonTable } from '../components/Skeleton.jsx';
@@ -56,7 +57,7 @@ function ApprovalForm({ project, approval, onClose, onSaved }) {
 }
 
 export default function Approvals() {
-  const { projectId, audience, loadProject, loadApprovals, showToast } = useApp();
+  const { projectId, audience, projects, selectProject, loadProject, loadApprovals, showToast } = useApp();
   const [project, setProject] = useState(null);
   const [approvals, setApprovals] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -89,7 +90,14 @@ export default function Approvals() {
 
   if (error) return <ErrorState message="Failed to load approval gates" onRetry={load} />;
   if (loading || !approvals) return <div className="page-loading"><SkeletonTable rows={6} /></div>;
+
+  const handleProjectChange = (event) => {
+    const id = event.target.value;
+    selectProject(id);
+    loadProject(id);
+  };
   return <div className="page">
+    <Header project={project} onProjectChange={handleProjectChange} projects={projects} />
     <header className="page-heading"><div><div className="eyebrow">Governance / human approval</div><h1>{projectName(project)}</h1><p>Client-facing, financial, security, production, and scope decisions require a named human approver.</p></div><button className="button primary" onClick={() => setCreating(true)}><Plus size={15} /> Add gate</button></header>
     <section className="approval-summary"><div><strong>{visible.filter((item) => item.status === 'pending').length}</strong><span>Pending</span></div><div><strong>{visible.filter((item) => item.status === 'approved').length}</strong><span>Approved</span></div><div><strong>{visible.filter((item) => item.status === 'rejected').length}</strong><span>Rejected</span></div><div><strong>{visible.filter((item) => item.status === 'escalated').length}</strong><span>Escalated</span></div></section>
     <section className="panel table-panel"><div className="panel-heading"><div><span>Approval gates</span><small>{audience === 'client' ? 'Client-facing decisions' : 'All governance decisions'}</small></div><span className="panel-count">{visible.length} gates</span></div>

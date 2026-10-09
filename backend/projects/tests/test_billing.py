@@ -63,7 +63,7 @@ class InvoiceCreationTests(InvoiceTestBase):
         self.assertEqual(resp.status_code, 201, resp.data)
         self.assertEqual(resp.data["status"], "draft")
         self.assertEqual(resp.data["milestone_name"], "Discovery complete")
-        self.assertEqual(resp.data["invoice_number"], f"INV-{resp.data['id']:04d}")
+        self.assertEqual(resp.data["invoice_number"], f"P{self.project.pk:04d}-I{resp.data['id']:04d}")
 
     def test_new_invoice_inherits_project_currency(self):
         self.client.force_login(self.staff)
@@ -437,3 +437,54 @@ class BudgetRedactionTests(InvoiceTestBase):
         resp = self.client.get(f"/api/projects/{self.project.pk}/")
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(Decimal(resp.data["budget"]), Decimal("10000.00"))
+
+
+class BillingAnalyticsTests(InvoiceTestBase):
+    def _paid_invoice(self, label, amount, paid_at):
+        return ProjectInvoice.objects.create(
+            project=self.project, label=label, amount=amount,
+            status="paid", paid_at=paid_at,
+        )
+
+    def test_staff_gets_income_and_growth(self):
+        first_of_month = timezone.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        last_month = first_of_month - timedelta(days=1)
+        self._paid_invoice("Paid last month", Decimal("500.00"), last_month)
+        self._paid_invoice("Paid this month", Decimal("1000.00"), timezone.now())
+        ProjectInvoice.objects.create(
+            project=self.project, label="Void", amount=Decimal("999.00"),
+            status="void",
+        )
+        self.invoice.status = "sent"
+        self.invoice.save(update_fields=["status"])
+        self.client.force_login(self.staff)
+        resp = self.client.get(reverse("billing-analytics"))
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertEqual(Decimal(resp.data["totals"]["paid"]), Decimal("1500.00"))
+        self.assertEqual(Decimal(resp.data["totals"]["invoiced"]), Decimal("5500.00"))
+        self.assertEqual(Decimal(resp.data["totals"]["outstanding"]), Decimal("4000.00"))
+        self.assertEqual(resp.data["totals"]["invoice_count"], 3)
+        self.assertEqual(resp.data["totals"]["paid_count"], 2)
+        self.assertEqual(len(resp.data["monthly"]), 12)
+        self.assertEqual(Decimal(resp.data["growth"]["previous"]), Decimal("500.00"))
+        self.assertEqual(Decimal(resp.data["growth"]["current"]), Decimal("1000.00"))
+        self.assertEqual(resp.data["growth"]["percent"], 100.0)
+        self.assertEqual(resp.data["growth"]["direction"], "up")
+        self.assertEqual(resp.data["top_clients"][0]["client_name"], "Acme")
+        self.assertEqual(Decimal(resp.data["top_clients"][0]["paid"]), Decimal("1500.00"))
+
+    def test_growth_is_flat_without_previous_income(self):
+        self._paid_invoice("Only invoice", Decimal("250.00"), timezone.now())
+        self.client.force_login(self.staff)
+        resp = self.client.get(reverse("billing-analytics"))
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertEqual(resp.data["growth"]["percent"], None)
+        self.assertEqual(resp.data["growth"]["direction"], "up")
+
+    def test_client_cannot_read_analytics(self):
+        self.client.force_login(self.client_user)
+        resp = self.client.get(reverse("billing-analytics"))
+        self.assertEqual(resp.status_code, 403)
+
+    def test_anonymous_cannot_read_analytics(self):
+        self.assertIn(self.client.get(reverse("billing-analytics")).status_code, (401, 403))

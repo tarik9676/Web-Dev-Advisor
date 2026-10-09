@@ -50,7 +50,7 @@ def create_checkout_session(invoice, request=None):
             return existing.url, existing.id
 
     stripe = _stripe()
-    invoice_number = f"INV-{invoice.pk:04d}"
+    invoice_number = f"P{invoice.project_id:04d}-I{invoice.pk:04d}"
     base = app_base_url(request)
     milestone = invoice.milestone
 

@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Plus, Edit, Trash2, Globe } from 'lucide-react';
 import { servicesApi } from '../../api/products';
+import { useApp } from '../../context/AppContext.jsx';
+import Header from '../../components/Header.jsx';
 
 function ServiceRow({ service, onEdit, onDelete, onView }) {
   return (
@@ -35,11 +37,19 @@ function ServiceRow({ service, onEdit, onDelete, onView }) {
 }
 
 export default function ServicesAdminPage() {
+  const { projectId, projects, selectProject, loadProject } = useApp();
+  const project = projects.find((item) => String(item.id) === String(projectId)) || projects[0];
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [deletingSlug, setDeletingSlug] = useState(null);
   const [error, setError] = useState(null);
   const navigate = useNavigate();
+
+  const handleProjectChange = (event) => {
+    const id = event.target.value;
+    selectProject(id);
+    loadProject(id);
+  };
 
   useEffect(() => {
     loadServices();
@@ -95,6 +105,7 @@ export default function ServicesAdminPage() {
 
   return (
     <div className="page services-admin-page">
+      <Header project={project} onProjectChange={handleProjectChange} projects={projects} />
       <div className="page-heading">
         <div>
           <span className="eyebrow">Admin</span>

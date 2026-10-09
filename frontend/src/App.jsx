@@ -8,6 +8,7 @@ import Tasks from './pages/Tasks.jsx';
 import Approvals from './pages/Approvals.jsx';
 import Risks from './pages/Risks.jsx';
 import Knowledge from './pages/Knowledge.jsx';
+import Milestones from './pages/Milestones.jsx';
 import ServicesAdminPage from './pages/admin/ServicesAdminPage.jsx';
 import ProductsAdminPage from './pages/admin/ProductsAdminPage.jsx';
 import ServiceEditPage from './pages/admin/ServiceEditPage.jsx';
@@ -15,6 +16,10 @@ import ProductEditPage from './pages/admin/ProductEditPage.jsx';
 import ProjectsAdminPage from './pages/admin/ProjectsAdminPage.jsx';
 import ProjectEditPage from './pages/admin/ProjectEditPage.jsx';
 import BillingPage from './pages/admin/BillingPage.jsx';
+import OrdersPage from './pages/admin/OrdersPage.jsx';
+import ClientsPage from './pages/admin/ClientsPage.jsx';
+import ClientProfilePage from './pages/admin/ClientProfilePage.jsx';
+import ClientEditPage from './pages/admin/ClientEditPage.jsx';
 import Home from './pages/public/Home.jsx';
 import Services from './pages/public/Services.jsx';
 import ServiceDetail from './pages/public/ServiceDetail.jsx';
@@ -80,6 +85,7 @@ export default function App() {
         <Route path="/app/approvals" element={<Approvals />} />
         <Route path="/app/risks" element={<Risks />} />
         <Route path="/app/knowledge" element={<Knowledge />} />
+        <Route path="/app/milestones" element={<Milestones />} />
 
         {/* Project administration - staff only */}
         <Route element={<RequireStaff />}>
@@ -87,6 +93,11 @@ export default function App() {
           <Route path="/app/projects/new" element={<ProjectEditPage />} />
           <Route path="/app/projects/:id/edit" element={<ProjectEditPage />} />
           <Route path="/app/billing" element={<BillingPage />} />
+          <Route path="/app/orders" element={<OrdersPage />} />
+          <Route path="/app/clients" element={<ClientsPage />} />
+          <Route path="/app/clients/new" element={<ClientEditPage />} />
+          <Route path="/app/clients/:id/edit" element={<ClientEditPage />} />
+          <Route path="/app/clients/:id" element={<ClientProfilePage />} />
         </Route>
 
         {/* Catalog administration - staff only */}
@@ -107,6 +118,7 @@ export default function App() {
       <Route path="/approvals" element={<Navigate to="/app/approvals" replace />} />
       <Route path="/risks" element={<Navigate to="/app/risks" replace />} />
       <Route path="/knowledge" element={<Navigate to="/app/knowledge" replace />} />
+      <Route path="/milestones" element={<Navigate to="/app/milestones" replace />} />
     </Routes>
   );
 }

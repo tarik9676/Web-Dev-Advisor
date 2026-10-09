@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Edit, Trash2, FolderOpen } from 'lucide-react';
 import { projectsApi } from '../../api/projects';
+import { useApp } from '../../context/AppContext.jsx';
+import Header from '../../components/Header.jsx';
 
 const STATUS_LABELS = {
   planning: 'Planning',
@@ -22,8 +24,9 @@ function ProjectRow({ project, onEdit, onDelete, onView }) {
       <td>
         <strong>{project.project_name}</strong>
         <br />
-        <small>{project.client_name} · {project.slug}</small>
+        <small>{project.slug}</small>
       </td>
+      <td>{project.client_name || '—'}</td>
       <td>
         <span className={`status-badge ${project.status === 'active' ? '' : project.status === 'planning' ? 'draft' : 'archived'}`}>
           {STATUS_LABELS[project.status] || project.status}
@@ -50,11 +53,19 @@ function ProjectRow({ project, onEdit, onDelete, onView }) {
 }
 
 export default function ProjectsAdminPage() {
-  const [projects, setProjects] = useState([]);
+  const { projectId, projects, selectProject, loadProject } = useApp();
+  const project = projects.find((item) => String(item.id) === String(projectId)) || projects[0];
+  const [projectsList, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState(null);
   const [error, setError] = useState(null);
   const navigate = useNavigate();
+
+  const handleProjectChange = (event) => {
+    const id = event.target.value;
+    selectProject(id);
+    loadProject(id);
+  };
 
   useEffect(() => {
     loadProjects();
@@ -103,7 +114,7 @@ export default function ProjectsAdminPage() {
       <div className="page">
         <div className="skeleton-table">
           <div className="skeleton-row">
-            <span /><span /><span /><span /><span /><span />
+            <span /><span /><span /><span /><span /><span /><span /><span />
           </div>
         </div>
       </div>
@@ -112,6 +123,7 @@ export default function ProjectsAdminPage() {
 
   return (
     <div className="page projects-admin-page">
+      <Header project={project} onProjectChange={handleProjectChange} projects={projects} />
       <div className="page-heading">
         <div>
           <span className="eyebrow">Admin</span>
@@ -131,6 +143,7 @@ export default function ProjectsAdminPage() {
             <thead>
               <tr>
                 <th>Project</th>
+                <th>Client</th>
                 <th>Status</th>
                 <th>Budget</th>
                 <th>Team</th>
@@ -151,7 +164,7 @@ export default function ProjectsAdminPage() {
               ))}
               {projects.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="state-panel">
+                  <td colSpan={7} className="state-panel">
                     No projects yet. Click &quot;New Project&quot; to open one for a client.
                   </td>
                 </tr>

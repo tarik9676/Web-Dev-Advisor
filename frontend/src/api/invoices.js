@@ -28,4 +28,12 @@ export const invoicesApi = {
   void: (projectId, id) => api.post(`/projects/${projectId}/invoices/${id}/void/`, {}),
 
   getBillingSummary: (projectId) => api.get(`/projects/${projectId}/billing_summary/`),
+
+  // Income and growth analytics across every project the staff
+  // member can see.
+  getAnalytics: () => api.get('/billing/analytics/'),
+
+  // All invoices across visible projects for the orders page.
+  getAllAcrossProjects: (params = {}) =>
+    api.get(withQuery('/orders/', params)).then(res => res.results || res),
 };

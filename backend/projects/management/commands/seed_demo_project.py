@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 from datetime import timedelta
-from projects.models import Project, ProjectInvoice, TeamMember
+from projects.models import Project, ProjectInvoice, TeamMember, Client
 from workstreams.models import Workstream, Task, Milestone
 from governance.models import ApprovalGate, Risk, DecisionLog
 from products.models import Product, ProductCategory, ProductLicense, ProductDownload
@@ -41,11 +41,15 @@ class Command(BaseCommand):
 
         demo_user, user_created = get_user_model().objects.get_or_create(
             username=DEMO_USERNAME,
-            defaults={"email": DEMO_EMAIL, "first_name": "Demo", "last_name": "Advisor"},
+            defaults={"email": DEMO_EMAIL, "first_name": "Demo", "last_name": "Advisor", "is_staff": True},
         )
         demo_user.set_password(DEMO_PASSWORD)
+        demo_user.is_staff = True
         demo_user.save()
         project.members.add(demo_user)
+
+        # Create demo clients with linked user accounts
+        self._seed_demo_clients()
 
         members_data = [
             ("Sarah Chen", "project_lead", "human", True),
@@ -765,7 +769,73 @@ class Command(BaseCommand):
                     "status": status,
                 }
             )
+        self._seed_demo_clients()
 
         self.stdout.write(self.style.SUCCESS(
-            f"Successfully seeded demo project '{slug}' (created={created})"
+            f"Successfully seeded demo project '{SLUG}' (created={created})"
         ))
+
+    def _seed_demo_clients(self):
+        """Create demo clients with linked user accounts."""
+        clients_data = [
+            {
+                "name": "Demo Client",
+                "email": "demo-client@webdevadvisor.local",
+                "company": "Demo Corporation",
+                "phone": "+1-555-0100",
+                "street_address": "100 Main Street, Suite 500",
+                "city": "San Francisco",
+                "postal_code": "94102",
+                "country": "USA",
+                "billing_address": "100 Main Street, Suite 500\nSan Francisco, CA 94102\nUSA",
+                "credentials": "WordPress Admin: demo@webdevadvisor.local / demo-pass-2026\nStripe Dashboard: demo@webdevadvisor.local",
+                "notes": "Primary demo client for the WooCommerce agency. Reference project for all features.",
+                "username": "demo-client",
+                "password": "demo-pass-2026",
+            },
+            {
+                "name": "Marketplace Co",
+                "email": "contact@marketplace-co.com",
+                "company": "Marketplace Co",
+                "phone": "+1-555-0200",
+                "street_address": "500 Howard Street",
+                "city": "New York",
+                "postal_code": "10001",
+                "country": "USA",
+                "billing_address": "500 Howard Street\nNew York, NY 10001\nUSA",
+                "credentials": "WordPress Admin: marketplace-admin@marketplace-co.com\nStripe Connect: marketplace-co@stripe.com",
+                "notes": "Multi-vendor marketplace project client.",
+                "username": "marketplace-co",
+                "password": "demo-pass-2026",
+            },
+            {
+                "name": "FitLife",
+                "email": "hello@fitlife.io",
+                "company": "FitLife Wellness",
+                "phone": "+1-555-0300",
+                "street_address": "200 Fitness Way",
+                "city": "Austin",
+                "postal_code": "78701",
+                "country": "USA",
+                "billing_address": "200 Fitness Way\nAustin, TX 78701\nUSA",
+                "credentials": "MemberPress Admin: fitlife-admin@fitlife.io\nWooCommerce Subscriptions: fitlife@stripe.com",
+                "notes": "Health & wellness membership subscription site client.",
+                "username": "fitlife",
+                "password": "demo-pass-2026",
+            },
+        ]
+        for cdata in clients_data:
+            username = cdata.pop("username")
+            password = cdata.pop("password")
+            client, created = Client.objects.get_or_create(
+                name=cdata["name"],
+                defaults=cdata,
+            )
+            if created or not client.user:
+                from projects.serializers import ClientSerializer
+                serializer = ClientSerializer()
+                serializer._get_or_create_user(client, username, password)
+            if created:
+                self.stdout.write(f"  Created client: {client.name}")
+            else:
+                self.stdout.write(f"  Client exists: {client.name}")
